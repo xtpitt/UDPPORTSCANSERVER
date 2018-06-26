@@ -10,7 +10,7 @@
 #include <pthread.h>
 
 #define BUFFSIZE 64
-#define TIMEOUT_MS 1500
+#define TIMEOUT_MS 3500
 #define TIMEOUT_CTR 5
 #define MSGPORT 50025
 //using namespace std;
@@ -22,11 +22,16 @@ void signalbreak(int sig){
     exit(0);
 }
 struct threaddata{
+    int sfd;
+    struct sockaddr_in* msgaddr;
     int port;
     int portend;
     struct timeval tv;
 };
 int scanhandler(struct threaddata* td){
+    int sfd=td->sfd;
+    sockaddr_in* msgaddr=td->msgaddr;
+    socklen_t msgaddrlen= sizeof(*msgaddr);
     int port=td->port;
     int portend=td->portend;
     struct timeval tv=td->tv;
@@ -34,9 +39,11 @@ int scanhandler(struct threaddata* td){
     int fd;
 
     unsigned char buf[BUFFSIZE];
+    unsigned char msgbuf[BUFFSIZE];
     while(port<=portend){
         //printf("Scanning Port %d.\n", port);
         memset(buf,0,BUFFSIZE);
+        memset(msgbuf,0,BUFFSIZE);
         if((fd=socket(AF_INET, SOCK_DGRAM,0))<0) {
             perror("Unable to start UDP scan socket");
             return 0;
@@ -53,12 +60,19 @@ int scanhandler(struct threaddata* td){
             printf("Unable to bind scan socket at port %d.\n", port);
             port++;
             close(fd);
-            usleep(1500000);
+            /*usleep(TIMEOUT_MS*1000);*/
             continue;
         }
-        int recvlen=0;
+        int recvlen=0, msgrecvlen=0;
         if((setsockopt(fd,SOL_SOCKET, SO_RCVTIMEO,&tv, sizeof(tv)))<0)
             perror("error setting recv timout");
+        // send messages first;
+        int msglen=sprintf((char *)msgbuf,"%d",port);
+        if(sendto(sfd,msgbuf, msglen,0, NULL, 0)<0){
+            perror("TCP message link broken");
+            return -1;
+        }
+
         recvlen=recvfrom(fd, buf, BUFFSIZE, 0, (struct sockaddr*)&readdr, &readdrlen);
         if(recvlen>0){
             //recvtotal+=recvlen;
@@ -84,16 +98,19 @@ int scanhandler(struct threaddata* td){
             usleep(TIMEOUT_MS*1000/2);
             continue;
         }
-
         ++port;
         close(fd);
     }
+    char* endmsg="end";
+    //sendto(sfd,endmsg, strlen(endmsg),0, NULL, 0);
+    close(sfd);
+    printf("Scan session ends.\n");
     delete td;
     return 0;
 }
 int main(int argc, char *argv[]) {
 
-    int fd;
+    int fd,sfd;
     signal(SIGINT,signalbreak);
     //time interval for scan
     struct timeval tv;
@@ -105,30 +122,40 @@ int main(int argc, char *argv[]) {
     tvmsg.tv_usec=0;
     /*Set message IP*/
     struct sockaddr_in addr;
-    struct sockaddr_in readdr;
-    socklen_t readdrlen= sizeof(readdr);
+    socklen_t addrlen= sizeof(addr);
     //set socket
     memset((char*)&addr, 0, sizeof(addr));
     addr.sin_family=AF_INET;
     addr.sin_addr.s_addr= htonl(INADDR_ANY);
     addr.sin_port=htons(MSGPORT);
     int recvlen;
+    int opt=1;
     unsigned char msgbuf[BUFFSIZE];
 
-    if((fd=socket(AF_INET, SOCK_DGRAM,0))<0) {
-        perror("Unable to start UDP msg socket");
-        return 0;
+    if((fd=socket(AF_INET, SOCK_STREAM,0))<0) {
+        perror("Unable to start TCP msg socket");
+        return -1;
     }
     if(bind(fd, (struct sockaddr*)&addr, sizeof(addr))<0){
         perror("Unable to bind msg socket");
-        return 0;
+        return -1;
     }
+    if(setsockopt(fd,SOL_SOCKET,SO_REUSEADDR | SO_REUSEADDR,&opt, sizeof(opt))){
+        perror("Error setting options for TCP socket");
+        return -1;
+    }
+
     int port, portend;
+    if(listen(fd,3)<0){
+        perror("Fail to listen to MSGPORT");
+    }
     printf("Server started, waiting for clients:\n");
     while(work){
-        if((setsockopt(fd,SOL_SOCKET, SO_RCVTIMEO,&tvmsg, sizeof(tvmsg)))<0)
-            perror("error setting recv timout for message socket");
-        recvlen=recvfrom(fd, msgbuf, BUFFSIZE, 0, (struct sockaddr*)&readdr, &readdrlen);
+        if((sfd=accept(fd,(struct sockaddr*)&addr,&addrlen))<0){
+            perror("Error Accepting the socket.\n");
+            return -1;
+        }
+        recvlen=recvfrom(sfd, msgbuf, BUFFSIZE, 0, (struct sockaddr*)&addr, &addrlen);
         if(recvlen>0){
             //process request, process port number;
             char *pivot=strstr((char *)msgbuf,"request:");
@@ -157,13 +184,21 @@ int main(int argc, char *argv[]) {
             printf("Received Client Request\n");
             //send ack back
             char* ack="OK";
-            sendto(fd, ack, BUFFSIZE, 0, (struct sockaddr*)&readdr, readdrlen);
+            if(sendto(sfd, ack, 2, 0, NULL, 0)<0)
+            {
+                perror("ACK for client not sent.\n");
+                return -1;
+            }
+            printf("ACK sent.\n");
             struct threaddata* td=new struct threaddata;
+            td->sfd=sfd;
+            td->msgaddr=&addr;
             td->port=port;
             td->portend=portend;
             td->tv=tv;
             std::thread scanthread(scanhandler,td);
             scanthread.join();
+            close(sfd);
             //
         }
 
