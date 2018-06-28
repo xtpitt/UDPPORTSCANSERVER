@@ -135,6 +135,8 @@ int main(int argc, char *argv[]) {
     int opt=1;
     unsigned char msgbuf[BUFFSIZE];
 
+    signal(SIGPIPE, SIG_IGN);
+
     if((fd=socket(AF_INET, SOCK_STREAM,0))<0) {
         perror("Unable to start TCP msg socket");
         return -1;
@@ -199,9 +201,8 @@ int main(int argc, char *argv[]) {
             td->port=port;
             td->portend=portend;
             td->tv=tv;
-            //std::thread scanthread(scanhandler,td);
-            //scanthread.join();
-            scanhandler(td);
+            std::thread scanthread(scanhandler,td);
+            scanthread.join();
             printf("Waiting for new clients:\n");
             //
         }
