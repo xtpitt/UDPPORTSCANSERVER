@@ -71,8 +71,9 @@ int scanhandler(struct threaddata* td){
         // send messages first;
         int msglen=sprintf((char *)msgbuf,"%d",port);
         if(sendto(sfd,msgbuf, msglen,0, NULL, 0)<0){
-            perror("TCP message link broken");
-            return -1;
+            //perror("TCP message link broken");
+            printf("[ERR] TCP message link ended.\n");
+            break;
         }
 
         recvlen=recvfrom(fd, buf, BUFFSIZE, 0, (struct sockaddr*)&readdr, &readdrlen);
@@ -97,13 +98,13 @@ int scanhandler(struct threaddata* td){
             printf("Port %d ERROR %s.\n", port, strerror(errno));
             ++port;
             close(fd);
-            usleep(TIMEOUT_MS*1000/2);
+            //usleep(TIMEOUT_MS*1000/2);
             continue;
         }
         ++port;
         close(fd);
     }
-    char* endmsg="end";
+    //char* endmsg="end";
     //sendto(sfd,endmsg, strlen(endmsg),0, NULL, 0);
     close(sfd);
     printf("Scan session ends.\n");
@@ -200,10 +201,9 @@ int main(int argc, char *argv[]) {
             td->tv=tv;
             std::thread scanthread(scanhandler,td);
             scanthread.join();
-            close(sfd);
+            printf("Waiting for new clients:\n");
             //
         }
-
     }
     printf("Server Quit. Bye!!\n");
     return 0;
