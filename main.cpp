@@ -199,8 +199,9 @@ int main(int argc, char *argv[]) {
             td->port=port;
             td->portend=portend;
             td->tv=tv;
-            std::thread scanthread(scanhandler,td);
-            scanthread.join();
+            //std::thread scanthread(scanhandler,td);
+            //scanthread.join();
+            scanhandler(td);
             printf("Waiting for new clients:\n");
             //
         }
