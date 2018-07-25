@@ -37,7 +37,7 @@ int scanhandler(struct threaddata* td){
     int port=td->port;
     int portend=td->portend;
     struct timeval tv=td->tv;
-    printf("Client Listening Thread Created from %d to %d.\n", port, portend);
+    printf("Client Thead Scanning from %d to %d.\n", port, portend);
     int fd;
 
     unsigned char buf[BUFFSIZE];
@@ -104,8 +104,8 @@ int scanhandler(struct threaddata* td){
         ++port;
         close(fd);
     }
-    //char* endmsg="end";
-    //sendto(sfd,endmsg, strlen(endmsg),0, NULL, 0);
+    char* endmsg="end";
+    sendto(sfd,endmsg, strlen(endmsg),0, NULL, 0);
     close(sfd);
     printf("Scan session ends.\n");
     delete td;
@@ -202,8 +202,9 @@ int main(int argc, char *argv[]) {
             td->portend=portend;
             td->tv=tv;
             std::thread scanthread(scanhandler,td);
-            scanthread.join();
-            printf("Waiting for new clients:\n");
+            printf("Client Thread Created.\n");
+            scanthread.detach();
+            //printf("Waiting for new clients:\n");
             //
         }
     }
