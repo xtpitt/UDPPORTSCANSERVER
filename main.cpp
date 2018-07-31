@@ -24,6 +24,7 @@
 #define INTAJDTHRESHOLD 6
 #define BASEINTERVAL 80
 #define DEFINTERVAL 400
+#define SPTTIMEOUT 10
 
 //using namespace std;
 
@@ -81,7 +82,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
     std::string endstr="end";
     double adaptivesleep=DEFINTERVAL;
     printf("Entering upload testing cycle.\n");
-    while(diff.count()<3){//default timeout 3s
+    while(diff.count()<SPTTIMEOUT){//default timeout 3s
         quote=temp;
         auto tick1=std::chrono::system_clock::now();
         while(quote>0){
