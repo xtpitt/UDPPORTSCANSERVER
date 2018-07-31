@@ -21,10 +21,13 @@
 #define DYMPORTR 65535
 #define PORTALLO 10
 #define DROPTHRESHOLD 0.1
-#define INTAJDTHRESHOLD 6
+#define INTAJDTHRESHOLD 40
+#define DROPTHRURGENT 0.35
 #define BASEINTERVAL 80
 #define DEFINTERVAL 400
 #define SPTTIMEOUT 10
+
+
 
 //using namespace std;
 
@@ -128,6 +131,10 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
         //adjust timer
         if(lossbalance>DROPTHRESHOLD*temp && waveloss>DROPTHRESHOLD*temp&& intadjcount<INTAJDTHRESHOLD){
             adaptivesleep*=2;
+            intadjcount++;
+        }
+        if(lossbalance>DROPTHRURGENT*temp && waveloss>DROPTHRURGENT*temp&& intadjcount<INTAJDTHRESHOLD){
+            adaptivesleep*=8;
             intadjcount++;
         }
         if(waveloss==0){
