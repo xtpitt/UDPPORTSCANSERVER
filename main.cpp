@@ -84,6 +84,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     int sentl=0;
     double rate=0;
     double roundtime=0;
+    double timeline;
     std::string proceedstr="proceed";
     std::string testu="testu:";
     std::string endstr="end";
@@ -110,10 +111,13 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         diff2 = tick2-tick1;
         sumtime+=diff2.count();
         roundtime=diff2.count();
+        end=std::chrono::system_clock::now();
+        diff=end-start;
+        timeline=diff.count();
         //send current sent quote to tcp socket
         memset(msg,0,BUFFSIZE);
         memcpy(msg,testu.c_str(),strlen(testu.c_str()));
-        memcpy(msg+strlen(testu.c_str()),&sumtime, sizeof(sumtime));
+        memcpy(msg+strlen(testu.c_str()),&timeline, sizeof(timeline));
         memcpy(msg+strlen(testu.c_str())+sizeof(sumtime),&roundtime, sizeof(roundtime));
         if((sendto(streamfd, msg, strlen(testu.c_str())+ sizeof(sumtime)+sizeof(roundtime), 0, NULL, 0))<0){
             perror("Message sending error: upload continue message");
