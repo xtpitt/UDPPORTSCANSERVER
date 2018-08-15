@@ -22,7 +22,6 @@
 #define DYMPORTL 60000
 #define DYMPORTR 65535
 #define PORTALLO 10
-#define DROPZEROTHR 0.005
 #define DROPTHRESHOLD 0.1
 #define INTAJDTHRESHOLD 40
 #define DROPTHRURGENT 0.35
@@ -152,7 +151,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
             adaptivesleep*=8;
             intadjcount++;
         }
-        if(waveloss==0||DROPZEROTHR>(double)(waveloss/temp)){
+        if(waveloss==0){
             if(intadjcount>0)
                 intadjcount--;
             if(adaptivesleep>BASEINTERVAL*1.2)
