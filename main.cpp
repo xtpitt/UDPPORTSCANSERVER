@@ -1,5 +1,7 @@
 #include <iostream>
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <thread>
@@ -24,8 +26,8 @@
 #define INTAJDTHRESHOLD 40
 #define DROPTHRURGENT 0.35
 #define BASEINTERVAL 80
-#define DEFINTERVAL 400
-#define SPTTIMEOUT 10
+#define DEFINTERVAL 550
+#define SPTTIMEOUT 180
 
 
 
@@ -61,7 +63,7 @@ void randpayloadset(char* payload, size_t len){
         *(payload+i)=(char)(rand()%256);
     }
 }
-int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
+int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int dlto){
     char ubuf[PKTBUFSIZE];
     randpayloadset((char*)ubuf, PKTBUFSIZE);
     auto start = std::chrono::system_clock::now();
@@ -84,8 +86,10 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
     std::string testu="testu";
     std::string endstr="end";
     double adaptivesleep=DEFINTERVAL;
-    printf("Entering upload testing cycle.\n");
-    while(diff.count()<SPTTIMEOUT){//default timeout 3s
+    printf("Entering download testing cycle.\n");
+    if(dlto<SPTTIMEOUT)
+        dlto=SPTTIMEOUT;
+    while(diff.count()<dlto){//default timeout 180s
         quote=temp;
         auto tick1=std::chrono::system_clock::now();
         while(quote>0){
@@ -97,14 +101,15 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
                 count++;
                 quote--;
             }
-            usleep(adaptivesleep);
+            //usleep(adaptivesleep);
+            std::this_thread::sleep_for(std::chrono::microseconds((int)adaptivesleep));
         }
         auto tick2=std::chrono::system_clock::now();
         diff2 = tick2-tick1;
         sumtime+=diff2.count();
         //send current sent quote to tcp socket
         memset(msg,0,BUFFSIZE);
-        if((sendto(streamfd, testu.c_str(), sizeof(testu), 0, NULL, 0))<0){
+        if((sendto(streamfd, testu.c_str(), strlen(testu.c_str()), 0, NULL, 0))<0){
             perror("Message sending error: upload continue message");
             close(streamfd);
             close(udpfd);
@@ -170,7 +175,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg){
         return -1;
     }
 }
-int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, struct timeval tv0){
+int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, struct timeval tv0, int& dlto){
     int readlen=0, count=0;
     char buf[PKTBUFSIZE];
     fd_set udpreadset, tcpreadset;
@@ -194,7 +199,6 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
                     readlen=recvfrom(udpfd, buf, PKTBUFSIZE, 0, (sockaddr*)udpaddr, &udpaddrlen);
                     if(readlen==PKTBUFSIZE){
                         count++;
-                        tickcount=std::chrono::system_clock::now();
                     }
                     else if(readlen>0){
                         printf("%d Partial reception???\n", readlen);
@@ -205,14 +209,23 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
             FD_ZERO(&tcpreadset);
             FD_SET(sfd, &tcpreadset);
             tres = select(sfd + 1, &tcpreadset, NULL, NULL, &tv0);
-        } while ((tres==-1 &&errno==EINTR)||tres == 0);
+            if(tres<0||errno==EPIPE){
+                perror("TCP control link broken");
+                close(sfd);
+                close(udpfd);
+                return -1;
+            }
+            //timeout for broken pipe, happens when both reads zero
+        } while (tres == 0);
         //process http packet if
         memset(msgbuf,0 ,BUFFSIZE);
         //FIXME: We didn't check the FD_ISSET as only 1 socket is detected.
         int l=recvfrom(sfd, msgbuf, BUFFSIZE, 0, NULL, NULL);
-        if(l<0){
+        if(l<=0){
             perror("error receiving test messages");
-            //FIXME: How to handle;
+            close(sfd);
+            close(udpfd);
+            return -1;
         }
         if(strcmp((char*)msgbuf,"testu")==0){
             memset(msgbuf, 0, BUFFSIZE);
@@ -224,7 +237,9 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
                 return -1;
             }
         }
-        else if(strcmp((char*)msgbuf,"proceed")==0){//jump to next move;
+        else if(strstr((char*)msgbuf,"proceed:")!=NULL){//jump to next move;
+            memcpy(&dlto,msgbuf+8, sizeof(int));
+            //printf("Timeout:%d\n",dlto);
             break;
         }
         else if(strcmp((char*)msgbuf,"end")==0){
@@ -269,7 +284,6 @@ int scanhandler(struct threaddata* td){
             printf("Unable to bind scan socket at port %d.\n", port);
             port++;
             close(fd);
-            /*usleep(TIMEOUT_MS*1000);*/
             continue;
         }
         int recvlen=0, msgrecvlen=0;
@@ -305,7 +319,6 @@ int scanhandler(struct threaddata* td){
             printf("Port %d ERROR %s.\n", port, strerror(errno));
             ++port;
             close(fd);
-            //usleep(TIMEOUT_MS*1000/2);
             continue;
         }
         ++port;
@@ -396,7 +409,7 @@ int sptHandler(struct sptdata* sptd){
 
     //initial  udpaddr
     int udpfd;
-
+    int dlto;
     struct sockaddr_in udpaddr;
     socklen_t udpaddrlen= sizeof(udpaddr);
 
@@ -460,13 +473,13 @@ int sptHandler(struct sptdata* sptd){
                 }
                 //upload speedtest
                 printf("Starting Upload SpeedTest.\n");
-                if(speedtestrecv_s(udpfd, &udpaddr, sfd, (char*) msgbuf, tv0)<0){
+                if(speedtestrecv_s(udpfd, &udpaddr, sfd, (char*) msgbuf, tv0, dlto)<0){
                     close(udpfd);
                     close(sfd);
                     continue;
                 }
                 //download speedtest
-                if(speedtestsend_s(udpfd, &udpaddr, sfd, (char*) msgbuf)<0){
+                if(speedtestsend_s(udpfd, &udpaddr, sfd, (char*) msgbuf,dlto)<0){
                     close(udpfd);
                     close(sfd);
                     continue;
@@ -480,6 +493,9 @@ int sptHandler(struct sptdata* sptd){
                 close(sfd);
                 continue;
             }
+        }
+        else{
+            perror("Control link broken");
         }
 
     }
