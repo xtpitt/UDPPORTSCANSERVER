@@ -22,6 +22,7 @@
 #define DYMPORTL 60000
 #define DYMPORTR 65535
 #define PORTALLO 10
+#define DROPZEROTHR 0.005
 #define DROPTHRESHOLD 0.1
 #define INTAJDTHRESHOLD 40
 #define DROPTHRURGENT 0.35
@@ -82,8 +83,9 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     int feedback;
     int sentl=0;
     double rate=0;
+    double roundtime=0;
     std::string proceedstr="proceed";
-    std::string testu="testu";
+    std::string testu="testu:";
     std::string endstr="end";
     double adaptivesleep=DEFINTERVAL;
     printf("Entering download testing cycle.\n");
@@ -107,9 +109,13 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         auto tick2=std::chrono::system_clock::now();
         diff2 = tick2-tick1;
         sumtime+=diff2.count();
+        roundtime=diff2.count();
         //send current sent quote to tcp socket
         memset(msg,0,BUFFSIZE);
-        if((sendto(streamfd, testu.c_str(), strlen(testu.c_str()), 0, NULL, 0))<0){
+        memcpy(msg,testu.c_str(),strlen(testu.c_str()));
+        memcpy(msg+strlen(testu.c_str()),&sumtime, sizeof(sumtime));
+        memcpy(msg+strlen(testu.c_str())+sizeof(sumtime),&roundtime, sizeof(roundtime));
+        if((sendto(streamfd, msg, strlen(testu.c_str())+ sizeof(sumtime)+sizeof(roundtime), 0, NULL, 0))<0){
             perror("Message sending error: upload continue message");
             close(streamfd);
             close(udpfd);
@@ -142,7 +148,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
             adaptivesleep*=8;
             intadjcount++;
         }
-        if(waveloss==0){
+        if(waveloss==0||DROPZEROTHR>(double)(waveloss/temp)){
             if(intadjcount>0)
                 intadjcount--;
             if(adaptivesleep>BASEINTERVAL*1.2)
