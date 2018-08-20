@@ -22,9 +22,9 @@
 #define DYMPORTL 60000
 #define DYMPORTR 65535
 #define PORTALLO 10
-#define DROPTHRESHOLD 0.1
+#define DROPTHRESHOLD 0.005
 #define INTAJDTHRESHOLD 40
-#define DROPTHRURGENT 0.35
+#define DROPTHRURGENT 0.01
 #define BASEINTERVAL 80
 #define DEFINTERVAL 550
 #define SPTTIMEOUT 80
@@ -88,6 +88,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     std::string testu="testu:";
     std::string endstr="end";
     double adaptivesleep=DEFINTERVAL;
+    int countzeros=0;
     printf("Entering download testing cycle.\n");
     if(dlto<SPTTIMEOUT)
         dlto=SPTTIMEOUT;
@@ -140,7 +141,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
             printf("Some packet out of sequence\n");
         }
         if(waveloss>=0){
-            lossbalance=lossbalance+(waveloss-lossbalance)/8;
+            lossbalance=lossbalance+(waveloss-lossbalance)/4;
         }
         //adjust timer
         if(lossbalance>DROPTHRESHOLD*temp && waveloss>DROPTHRESHOLD*temp&& intadjcount<INTAJDTHRESHOLD){
@@ -152,15 +153,22 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
             intadjcount++;
         }
         if(waveloss==0){
+            countzeros++;
             if(intadjcount>0)
                 intadjcount--;
-            if(adaptivesleep>BASEINTERVAL*1.2)
-                adaptivesleep=adaptivesleep/1.2;
-            else
-                adaptivesleep=BASEINTERVAL;
-        }
+            if(countzeros>=3){
+                if(adaptivesleep>BASEINTERVAL*1.1)
+                    adaptivesleep=adaptivesleep/1.1;
+                else
+                    adaptivesleep=BASEINTERVAL;
+                countzeros=0;
+            }
+
+        } else
+        countzeros=0;
         end=std::chrono::system_clock::now();
         diff=end-start;
+
         //printf("%f\n", diff.count());
     }
     printf("Upload speed test cycle finished\n");
