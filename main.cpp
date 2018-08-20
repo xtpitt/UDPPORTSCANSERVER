@@ -139,17 +139,19 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         loss+=waveloss;
         if(feedback>temp){
             printf("Some packet out of sequence\n");
+            adaptivesleep=adaptivesleep*1.1;
+            countzeros=0;
         }
         if(waveloss>=0){
             lossbalance=lossbalance+(waveloss-lossbalance)/4;
         }
         //adjust timer
-        if(lossbalance>DROPTHRESHOLD*temp && waveloss>DROPTHRESHOLD*temp&& intadjcount<INTAJDTHRESHOLD){
-            adaptivesleep*=2;
+        if(lossbalance>DROPTHRURGENT*temp && waveloss>DROPTHRURGENT*temp&& intadjcount<INTAJDTHRESHOLD){
+            adaptivesleep*=6;
             intadjcount++;
         }
-        if(lossbalance>DROPTHRURGENT*temp && waveloss>DROPTHRURGENT*temp&& intadjcount<INTAJDTHRESHOLD){
-            adaptivesleep*=8;
+        else if(lossbalance>DROPTHRESHOLD*temp && waveloss>DROPTHRESHOLD*temp&& intadjcount<INTAJDTHRESHOLD){
+            adaptivesleep*=2;
             intadjcount++;
         }
         if(waveloss==0){
