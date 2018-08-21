@@ -24,7 +24,7 @@
 #define DYMPORTR 65535
 #define PORTALLO 10
 #define DROPTHRESHOLD 0.005
-#define INTAJDTHRESHOLD 5
+#define INTAJDTHRESHOLD 8
 #define DROPTHRURGENT 0.01
 #define BASEINTERVAL 80
 #define DEFINTERVAL 550
@@ -141,21 +141,21 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         //compute loss;
         waveloss=temp-feedback;
         loss+=waveloss;
-        if(feedback>temp){
+        /*if(feedback>temp){
             printf("Some packet out of sequence\n");
             adaptivesleep=adaptivesleep*1.1;
             countzeros=0;
-        }
+        }*/
         if(waveloss>=0){
             lossbalance=lossbalance+(waveloss-lossbalance)/4;
         }
         //adjust timer
         if(lossbalance>DROPTHRURGENT*temp && waveloss>DROPTHRURGENT*temp&& intadjcount<INTAJDTHRESHOLD){
-            adaptivesleep*=4;
+            adaptivesleep*=2;
             intadjcount+=2;
         }
         else if(lossbalance>DROPTHRESHOLD*temp && waveloss>DROPTHRESHOLD*temp&& intadjcount<INTAJDTHRESHOLD){
-            adaptivesleep*=2;
+            adaptivesleep*=1.4;
             intadjcount++;
         }
         if(waveloss==0){
