@@ -85,6 +85,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     double rate=0;
     double roundtime=0;
     double timeline;
+    unsigned int waveno=0;
     std::string proceedstr="proceed";
     std::string testu="testu:";
     std::string endstr="end";
@@ -96,6 +97,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     while(diff.count()<dlto){//default timeout 180s
         quote=temp;
         auto tick1=std::chrono::system_clock::now();
+        memcpy(ubuf,&waveno, sizeof(int));
         while(quote>0){
             sentl=sendto(udpfd,ubuf,PKTBUFSIZE,0,(sockaddr*)addr, socklen);
             if(sentl<=0) {
@@ -108,6 +110,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
             //usleep(adaptivesleep);
             std::this_thread::sleep_for(std::chrono::microseconds((int)adaptivesleep));
         }
+        waveno++;
         auto tick2=std::chrono::system_clock::now();
         diff2 = tick2-tick1;
         sumtime+=diff2.count();
@@ -204,6 +207,9 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
     auto tickcount=std::chrono::system_clock::now();
     auto ticknow=std::chrono::system_clock::now();
     std::chrono::duration<double> timeout;
+    unsigned int waveno=0;
+    unsigned int wavenorecv=0;
+    unsigned int wrongwavecount=0;
     while(1){
         count=0;
         do {
@@ -217,12 +223,17 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
             else if(ures>0){
                 if(FD_ISSET(udpfd, &udpreadset)){
                     readlen=recvfrom(udpfd, buf, PKTBUFSIZE, 0, (sockaddr*)udpaddr, &udpaddrlen);
-                    if(readlen==PKTBUFSIZE){
+                    memcpy(&wavenorecv,buf, sizeof(int));
+                    if(readlen==PKTBUFSIZE&&wavenorecv==waveno){
                         count++;
+                    }
+                    else if(wavenorecv!=waveno){
+                        wrongwavecount++;
                     }
                     else if(readlen>0){
                         printf("%d Partial reception???\n", readlen);
                     }
+
                 }
             }
             //select works not well
@@ -238,6 +249,7 @@ int speedtestrecv_s(int udpfd, sockaddr_in* udpaddr, int sfd, char* msgbuf, stru
             //timeout for broken pipe, happens when both reads zero
         } while (tres == 0);
         //process http packet if
+        waveno++;
         memset(msgbuf,0 ,BUFFSIZE);
         //FIXME: We didn't check the FD_ISSET as only 1 socket is detected.
         int l=recvfrom(sfd, msgbuf, BUFFSIZE, 0, NULL, NULL);
