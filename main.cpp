@@ -91,6 +91,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
     std::string endstr="end";
     double adaptivesleep=DEFINTERVAL;
     int countzeros=0;
+    int countnzeros=0;
     printf("Entering download testing cycle.\n");
     if(dlto<SPTTIMEOUT)
         dlto=SPTTIMEOUT;
@@ -160,6 +161,7 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         }
         if(waveloss==0){
             countzeros++;
+            countnzeros=0;
             if(intadjcount>0)
                 intadjcount--;
             if(countzeros>=3){
@@ -167,11 +169,17 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
                     adaptivesleep=adaptivesleep/1.1;
                 else
                     adaptivesleep=BASEINTERVAL;
-                countzeros=0;
+                countzeros--;
             }
 
-        } else
-        countzeros=0;
+        } else{
+            countzeros=-5;
+            countnzeros++;
+            if(countnzeros>=3){
+                adaptivesleep=adaptivesleep*1.1;
+                countzeros-=2;
+            }
+        }
         end=std::chrono::system_clock::now();
         diff=end-start;
 
