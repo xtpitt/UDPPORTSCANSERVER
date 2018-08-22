@@ -26,7 +26,7 @@
 #define DROPTHRESHOLD 0.005
 #define INTAJDTHRESHOLD 8
 #define DROPTHRURGENT 0.01
-#define BASEINTERVAL 80
+#define BASEINTERVAL 50
 #define DEFINTERVAL 550
 #define SPTTIMEOUT 80
 
@@ -183,7 +183,6 @@ int speedtestsend_s(int udpfd, sockaddr_in* addr, int streamfd, char* msg, int d
         end=std::chrono::system_clock::now();
         diff=end-start;
 
-        //printf("%f\n", diff.count());
     }
     printf("Upload speed test cycle finished\n");
     memset(msg,0,BUFFSIZE);
